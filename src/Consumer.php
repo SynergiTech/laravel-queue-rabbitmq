@@ -32,6 +32,9 @@ class Consumer extends Worker
     /** @var AMQPChannel */
     protected $channel;
 
+    /** @var boolean */
+    protected $gotJob = false;
+
     public function setContainer(Container $value): void
     {
         $this->container = $value;
@@ -79,6 +82,7 @@ class Consumer extends Worker
             false,
             false,
             function (AMQPMessage $message) use ($connection, $options, $connectionName, $queue): void {
+                $this->gotJob = true;
                 $job = new RabbitMQJob(
                     $this->container,
                     $connection,
@@ -108,7 +112,11 @@ class Consumer extends Worker
             // fire off this job for processing. Otherwise, we will need to sleep the
             // worker so no more jobs are processed until they should be processed.
             try {
+                $this->gotJob = false;
                 $this->channel->wait(null, true, (int) $options->timeout);
+                if ($this->gotJob == false) {
+                    $this->sleep($options->sleep > 0 ? $options->sleep : 1);
+                }
             } catch (AMQPRuntimeException $exception) {
                 $this->exceptions->report($exception);
 
